@@ -97,7 +97,7 @@ public class OpenRocketSaver extends RocketSaver {
 			if (!first)
 				writeln("");
 			first = false;
-			saveSimulation(s, options.getSaveSimulationData());
+			saveSimulation(s, options.getSimulationTimeSkip());
 		}
 		indent--;
 		writeln("</simulations>");
@@ -173,12 +173,13 @@ public class OpenRocketSaver extends RocketSaver {
 		
 		// Size per flight data point
 		int pointCount = 0;
-		if (options.getSaveSimulationData()) {
+		double timeSkip = options.getSimulationTimeSkip();
+		if (timeSkip != StorageOptions.SIMULATION_DATA_NONE) {
 			for (Simulation s : doc.getSimulations()) {
 				FlightData data = s.getSimulatedData();
 				if (data != null) {
 					for (int i = 0; i < data.getBranchCount(); i++) {
-						pointCount += countFlightDataBranchPoints(data.getBranch(i));
+						pointCount += countFlightDataBranchPoints(data.getBranch(i), timeSkip);
 					}
 				}
 			}
@@ -316,11 +317,11 @@ public class OpenRocketSaver extends RocketSaver {
 	}
 	
 	
-	private void saveSimulation(Simulation simulation, boolean saveSimulationData) throws IOException {
+	private void saveSimulation(Simulation simulation, double timeSkip) throws IOException {
 		SimulationOptions cond = simulation.getOptions();
 
 		Simulation.Status simStatus;
-		simStatus = saveSimulationData ? simulation.getStatus() : Simulation.Status.NOT_SIMULATED;
+		simStatus = timeSkip != StorageOptions.SIMULATION_DATA_NONE ? simulation.getStatus() : Simulation.Status.NOT_SIMULATED;
 
 		writeln("<simulation status=\"" + enumToXMLName(simStatus) + "\">");
 		indent++;
@@ -407,11 +408,13 @@ public class OpenRocketSaver extends RocketSaver {
 			}
 			
 			// Check whether to store data
-			if ((simulation.getStatus() == Simulation.Status.EXTERNAL) || // Always store external data
-				saveSimulationData) {
+			if (simulation.getStatus() == Simulation.Status.EXTERNAL) // Always store external data
+				timeSkip = 0;
+			
+			if (timeSkip != StorageOptions.SIMULATION_DATA_NONE) {
 				for (int i = 0; i < data.getBranchCount(); i++) {
 					FlightDataBranch branch = data.getBranch(i);
-					saveFlightDataBranch(branch);
+					saveFlightDataBranch(branch, timeSkip);
 				}
 			}
 			
@@ -471,8 +474,9 @@ public class OpenRocketSaver extends RocketSaver {
 		}
 	}
 	
-	private void saveFlightDataBranch(FlightDataBranch branch)
+	private void saveFlightDataBranch(FlightDataBranch branch, double timeSkip)
 			throws IOException {
+		double previousTime = -100000;
 		
 		if (branch == null)
 			return;
@@ -536,8 +540,25 @@ public class OpenRocketSaver extends RocketSaver {
 		
 		// Write the data
 		int length = branch.getLength();
-		for (int i = 0; i < length; i++) {
-			writeDataPointString(data, i, sb);
+		if (length > 0) {
+			writeDataPointString(data, 0, sb);
+			previousTime = timeData.get(0);
+		}
+		
+		for (int i = 1; i < length - 1; i++) {
+			if (timeData != null) {
+				if (Math.abs(timeData.get(i) - previousTime - timeSkip) < Math.abs(timeData.get(i + 1) - previousTime - timeSkip)) {
+					writeDataPointString(data, i, sb);
+					previousTime = timeData.get(i);
+				}
+			} else {
+				// If time data is not available, write all points
+				writeDataPointString(data, i, sb);
+			}
+		}
+		
+		if (length > 1) {
+			writeDataPointString(data, length - 1, sb);
 		}
 		
 		indent--;
@@ -545,8 +566,10 @@ public class OpenRocketSaver extends RocketSaver {
 	}
 	
 	/* TODO: LOW: This is largely duplicated from above! */
-	private int countFlightDataBranchPoints(FlightDataBranch branch) {
+	private int countFlightDataBranchPoints(FlightDataBranch branch, double timeSkip) {
 		int count = 0;
+		
+		double previousTime = -100000;
 		
 		if (branch == null)
 			return 0;
@@ -563,8 +586,23 @@ public class OpenRocketSaver extends RocketSaver {
 			return branch.getLength();
 		}
 		
-		// Count the data
-		count += branch.getLength();
+		// Write the data
+		int length = branch.getLength();
+		if (length > 0) {
+			count++;
+			previousTime = timeData.get(0);
+		}
+		
+		for (int i = 1; i < length - 1; i++) {
+			if (Math.abs(timeData.get(i) - previousTime - timeSkip) < Math.abs(timeData.get(i + 1) - previousTime - timeSkip)) {
+				count++;
+				previousTime = timeData.get(i);
+			}
+		}
+		
+		if (length > 1) {
+			count++;
+		}
 		
 		return count;
 	}

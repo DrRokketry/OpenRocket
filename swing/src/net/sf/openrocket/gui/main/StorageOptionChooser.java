@@ -74,9 +74,37 @@ public class StorageOptionChooser extends JPanel {
 		buttonGroup.add(allButton);
 		allButton.addActionListener(actionUpdater);
 		this.add(allButton, "spanx, wrap rel");
-				
-		//// Only summary data
-		noneButton = new JRadioButton(trans.get("StorageOptChooser.rdbut.Onlysummarydata"));
+		
+		//// Every
+		someButton = new JRadioButton(trans.get("StorageOptChooser.rdbut.Every"));
+		//// <html>Store plottable values approximately this far apart.<br>"
+		//// Larger values result in smaller files.
+		tip = trans.get("StorageOptChooser.lbl.longB1") +
+		trans.get("StorageOptChooser.lbl.longB2");
+		someButton.setToolTipText(tip);
+		buttonGroup.add(someButton);
+		someButton.addActionListener(actionUpdater);
+		this.add(someButton, "");
+		
+		timeSpinner = new JSpinner(new SpinnerNumberModel(0.0, 0.0, 5.0, 0.1));
+		timeSpinner.setToolTipText(tip);
+		timeSpinner.addChangeListener(new ChangeListener() {
+			@Override
+			public void stateChanged(ChangeEvent e) {
+				if (artificialEvent)
+					return;
+				someButton.setSelected(true);
+			}
+		});
+		this.add(timeSpinner, "wmin 55lp");
+		
+		//// seconds
+		JLabel label = new JLabel(trans.get("StorageOptChooser.lbl.seconds"));
+		label.setToolTipText(tip);
+		this.add(label, "wrap rel");
+		
+		//// Only primary figures
+		noneButton = new JRadioButton(trans.get("StorageOptChooser.rdbut.Onlyprimfig"));
 		//// <html>Store only the values shown in the summary table.<br>
 		//// This results in the smallest files.
 		noneButton.setToolTipText(trans.get("StorageOptChooser.lbl.longC1") +
@@ -101,20 +129,42 @@ public class StorageOptionChooser extends JPanel {
 	
 	
 	public void loadOptions(StorageOptions opts) {
+		double t;
 		
 		// Data storage radio button
-		if (opts.getSaveSimulationData()) {
+		t = opts.getSimulationTimeSkip();
+		if (t == StorageOptions.SIMULATION_DATA_ALL) {
 			allButton.setSelected(true);
-		} else {
+			t = DEFAULT_SAVE_TIME_SKIP;
+		} else if (t == StorageOptions.SIMULATION_DATA_NONE) {
 			noneButton.setSelected(true);
+			t = DEFAULT_SAVE_TIME_SKIP;
+		} else {
+			someButton.setSelected(true);
 		}
 		
+		// Time skip spinner
+		artificialEvent = true;
+		timeSpinner.setValue(t);
+		artificialEvent = false;
+
 		updateInfoLabel();
 	}
 	
 	
 	public void storeOptions(StorageOptions opts) {
-		opts.setSaveSimulationData(allButton.isSelected());
+		double t;
+		
+		if (allButton.isSelected()) {
+			t = StorageOptions.SIMULATION_DATA_ALL;
+		} else if (noneButton.isSelected()) {
+			t = StorageOptions.SIMULATION_DATA_NONE;
+		} else {
+			t = (Double)timeSpinner.getValue();
+		}
+		
+		opts.setSimulationTimeSkip(t);
+		
 		opts.setExplicitlySet(true);
 	}
 
